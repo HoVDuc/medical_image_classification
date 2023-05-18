@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.optim.lr_scheduler import OneCycleLR
 from tqdm import tqdm
 
 
@@ -16,6 +17,7 @@ class Trainer:
         self.print_every = print_every
         self.optim = torch.optim.Adam(
             params=self.model.parameters(), lr=learning_rate)
+        self.scheduler = OneCycleLR(self.optim, self.lr, self.epochs)
         self.criterion = nn.CrossEntropyLoss()
 
     def check_device(self):
@@ -34,7 +36,7 @@ class Trainer:
     def validation(self):
         self.model.eval()
         val_total_loss = 0
-        with torch.zero_grad():
+        with torch.no_grad():
             for batch in self.valid_loader:
                 val_inputs, val_targets = batch
                 val_pred = self.model(val_inputs)
@@ -51,13 +53,12 @@ class Trainer:
                         desc="EPOCH: {}/{}".format(epoch, self.epochs))
             for batch in pbar:
                 loss = self.training_step(batch)
-                pbar.set_description('loss: {}'.format(loss))
+                pbar.set_description('loss: {} - optimizer: {}'.format(loss, self.scheduler.get_lr()))
                 total_loss += loss
+            self.scheduler.step()
             avg_loss = total_loss / len(self.train_loader)
             
             if epoch % self.print_every == 0:
                 avg_val_loss = self.validation()
                 print("loss: {} - val_loss: {}".format(avg_loss, avg_val_loss))
                     
-            
-            

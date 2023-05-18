@@ -3,4 +3,4 @@ torchvision
 Pillow
 pandas
 numpy
-matplolib
+matplotlib

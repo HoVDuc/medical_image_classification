@@ -70,7 +70,7 @@ def check_gpu():
 
 
 def main():
-    df_train, df_valid, df_test = split_data()
+    df_train, df_valid, df_test = split_data(True)
     device = check_gpu()
 
     transform = transforms.Compose([

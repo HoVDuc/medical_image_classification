@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 class Trainer:
 
-    def __init__(self, model, train_loader, valid_loader, epochs, learning_rate, device) -> None:
+    def __init__(self, model, train_loader, valid_loader, epochs, learning_rate, device, print_every=5) -> None:
         self.device = device
         self.model = model.to(self.device)
         self.train_loader = train_loader
@@ -30,8 +30,19 @@ class Trainer:
         self.optim.step()
         return loss.item()
 
-    def validation_step(self):
-        pass
+    def validation(self):
+        self.model.eval()
+        val_total_loss = 0
+        with torch.zero_grad():
+            for batch in self.valid_loader:
+                val_inputs, val_targets = batch
+                val_pred = self.model(val_inputs)
+                val_loss = self.criterion(val_pred, val_targets)
+                val_total_loss += val_loss
+            avg_val_loss = val_total_loss / len(self.valid_loader)
+        
+        return avg_val_loss
+        
 
     def train(self):
         for epoch in range(1, self.epochs + 1):
@@ -39,7 +50,14 @@ class Trainer:
             pbar = tqdm(self.train_loader, ncols=100,
                         desc="EPOCH: {}/{}".format(epoch, self.epochs))
             for batch in pbar:
-                loss = self.training_step(batch)
+                loss = self.training(batch)
+                pbar.set_description('loss: {}'.format(loss))
                 total_loss += loss
-            pbar.set_description('loss: {}'.format(
-                total_loss / len(self.train_loader)))
+            avg_loss = total_loss / len(self.train_loader)
+            
+            if epoch % self.print_every == 0:
+                avg_val_loss = self.validation()
+                print("loss: {} - val_loss: {}".format(avg_loss, avg_val_loss))
+                    
+            
+            

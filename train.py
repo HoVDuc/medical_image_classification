@@ -41,12 +41,15 @@ def split_data():
     df_sample = df.sample(frac=1).reset_index(drop=True)
 
     n_sample = len(df)
-    n_train = int(n_sample * 0.8)
+    n_train = int(n_sample * 0.7)
+    n_valid = int(n_sample * 0.2)
+    n_test = n_sample - (n_train + n_valid)
 
     df_train = df_sample[:n_train]
-    df_valid = df_sample[n_train:]
+    df_valid = df_sample[n_train:n_train+n_valid]
+    df_test = df_sample[n_train+n_valid:]
 
-    return df_train, df_valid
+    return df_train, df_valid, df_test
 
 
 def check_gpu():
@@ -54,13 +57,13 @@ def check_gpu():
 
 
 def main():
-    df_train, df_valid = split_data()
+    df_train, df_valid, df_test = split_data()
     device = check_gpu()
 
     transform = transforms.Compose([
         # transforms.ToTensor(),
         # transforms.RandomRotation(30),
-        transforms.GaussianBlur(3),
+        # transforms.GaussianBlur(3),
         # transforms.RandomAffine((1, 30)),
         # transforms.RandomHorizontalFlip(0.3),
         # transforms.CenterCrop((224, 224)) if random.random() <= 0.3 else ,
@@ -70,11 +73,14 @@ def main():
 
     train_data = MedicalData(PATH, df_train, device, transform)
     valid_data = MedicalData(PATH, df_valid, device, transform)
+    test_data = MedicalData(PATH, df_test, device, transform)
 
     train_loader = torch.utils.data.DataLoader(train_data,
                                                batch_size=64,
                                                shuffle=True)
     valid_loader = torch.utils.data.DataLoader(valid_data,
+                                               batch_size=64)
+    test_loader = torch.utils.data.DataLoader(test_data,
                                                batch_size=64)
 
     model = timm.create_model(

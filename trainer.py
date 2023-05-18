@@ -5,11 +5,12 @@ from tqdm import tqdm
 
 class Trainer:
 
-    def __init__(self, model, train_loader, valid_loader, epochs, learning_rate, device, print_every=5) -> None:
+    def __init__(self, model, train_loader, valid_loader, test_loader, epochs, learning_rate, device, print_every=5) -> None:
         self.device = device
         self.model = model.to(self.device)
         self.train_loader = train_loader
         self.valid_loader = valid_loader
+        self.test_loader = test_loader
         self.epochs = epochs
         self.lr = learning_rate
 
@@ -43,14 +44,13 @@ class Trainer:
         
         return avg_val_loss
         
-
     def train(self):
         for epoch in range(1, self.epochs + 1):
             total_loss = 0
             pbar = tqdm(self.train_loader, ncols=100,
                         desc="EPOCH: {}/{}".format(epoch, self.epochs))
             for batch in pbar:
-                loss = self.training(batch)
+                loss = self.training_step(batch)
                 pbar.set_description('loss: {}'.format(loss))
                 total_loss += loss
             avg_loss = total_loss / len(self.train_loader)

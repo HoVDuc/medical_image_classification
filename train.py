@@ -34,10 +34,23 @@ def load_data():
 
     return data
 
+def undersampling(df):
+    df_list = []
+    for label in set(df['label'].values):
+        sampling = df[df['label'] == label].head(df['label'].value_counts()['AIS']).reset_index(drop=True)
+        df_list.append(sampling)
 
-def split_data():
+    df_sampling = pd.concat(df_list, axis=0).reset_index(drop=True)
+    return df_sampling
+
+
+def split_data(sampling=False):
     data = load_data()
     df = pd.DataFrame(data)
+    
+    if sampling:
+        df = undersampling(df)
+        
     df_sample = df.sample(frac=1).reset_index(drop=True)
 
     n_sample = len(df)

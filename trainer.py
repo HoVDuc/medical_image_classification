@@ -13,7 +13,7 @@ class Trainer:
         self.test_loader = test_loader
         self.epochs = epochs
         self.lr = learning_rate
-
+        self.print_every = print_every
         self.optim = torch.optim.Adam(
             params=self.model.parameters(), lr=learning_rate)
         self.criterion = nn.CrossEntropyLoss()

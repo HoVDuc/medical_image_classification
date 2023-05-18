@@ -22,6 +22,11 @@ class Trainer:
 
     def check_device(self):
         return 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    
+    def calc_accuracy(self, pred, targets):
+        pred = torch.argmax(pred, dim=1)
+        accuracy = sum(pred == targets)
+        return accuracy / len(targets)
 
     def training_step(self, batch):
         self.model.train()
@@ -36,15 +41,19 @@ class Trainer:
     def validation(self):
         self.model.eval()
         val_total_loss = 0
+        val_total_accuracy = 0
         with torch.no_grad():
             for batch in self.valid_loader:
                 val_inputs, val_targets = batch
                 val_pred = self.model(val_inputs)
                 val_loss = self.criterion(val_pred, val_targets)
                 val_total_loss += val_loss
+                accuracy = self.calc_accuracy(val_pred, val_targets)
+                val_total_accuracy += accuracy
             avg_val_loss = val_total_loss / len(self.valid_loader)
-        
-        return avg_val_loss
+            avg_val_accuracy = val_total_accuracy / len(self.valid_loader)
+
+        return avg_val_loss, avg_val_accuracy
         
     def train(self):
         for epoch in range(1, self.epochs + 1):
@@ -53,12 +62,13 @@ class Trainer:
                         desc="EPOCH: {}/{}".format(epoch, self.epochs))
             for batch in pbar:
                 loss = self.training_step(batch)
-                pbar.set_description('loss: {} - optimizer: {}'.format(loss, self.scheduler.get_lr()))
+                pbar.set_description('loss: {} - optimizer: {}'.format(loss, round(self.scheduler.get_lr()[0], 3)))
                 total_loss += loss
             self.scheduler.step()
             avg_loss = total_loss / len(self.train_loader)
             
             if epoch % self.print_every == 0:
-                avg_val_loss = self.validation()
-                print("loss: {} - val_loss: {}".format(avg_loss, avg_val_loss))
+                avg_val_loss, avg_val_accuracy = self.validation()
+                
+                print("loss: {} - val_loss: {} - acc: {}".format(avg_loss, avg_val_loss, avg_val_accuracy))
                     

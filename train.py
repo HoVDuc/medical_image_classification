@@ -99,7 +99,14 @@ def main():
     model = timm.create_model(
         'hf-hub:timm/eca_nfnet_l0', pretrained=True, num_classes=6)
 
-    trainer = Trainer(model, train_loader, valid_loader, test_loader, 10, 1e-4, device, 3)
+    trainer = Trainer(model=model, 
+                      train_loader=train_loader, 
+                      valid_loader=valid_loader, 
+                      test_loader=test_loader, 
+                      epochs=10, 
+                      max_lr=1e-4, 
+                      device=device, 
+                      print_every=2)
     trainer.train()
 
 

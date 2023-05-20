@@ -1,25 +1,22 @@
-from trainer import Trainer
-from dataloader import MedicalData
 from torchvision import transforms
+from dataloader import MedicalData
+from trainer import Trainer
+import timm
 import torchvision
 import torch.nn as nn
 import torch
-from PIL import Image
-import pandas as pd
 import numpy as np
-import random
-import pathlib
+import pandas as pd
+import argparse
+from PIL import Image
 import glob
+import pathlib
+import random
 import os
-import timm
 import sys
 sys.path.append('./pytorch_model/')
 
-
-PATH = '../../../adminpc/workspace/Sharing_Data/Data_classification/'
-
-
-def load_data():
+def load_data(PATH):
     folders = glob.glob(PATH + "/*/")
 
     data = {
@@ -34,23 +31,25 @@ def load_data():
 
     return data
 
+
 def undersampling(df):
     df_list = []
     for label in set(df['label'].values):
-        sampling = df[df['label'] == label].head(df['label'].value_counts()['AIS']).reset_index(drop=True)
+        sampling = df[df['label'] == label].head(
+            df['label'].value_counts()['AIS']).reset_index(drop=True)
         df_list.append(sampling)
 
     df_sampling = pd.concat(df_list, axis=0).reset_index(drop=True)
     return df_sampling
 
 
-def split_data(sampling=False):
-    data = load_data()
+def split_data(PATH, sampling=False):
+    data = load_data(PATH)
     df = pd.DataFrame(data)
-    
+
     if sampling:
         df = undersampling(df)
-        
+
     df_sample = df.sample(frac=1).reset_index(drop=True)
 
     n_sample = len(df)
@@ -70,15 +69,28 @@ def check_gpu():
 
 
 def main():
-    df_train, df_valid, df_test = split_data(True)
+    parser = argparse.ArgumentParser(description='Classification training')
+    parser.add_argument('--model_name', type=str)
+    parser.add_argument('--path_data', type=str, default='../Data_classification/')
+    parser.add_argument('--num_epochs', type=int, default=30)
+    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--sampling', action='store_true')
+    
+    args = parser.parse_args()
+    args = vars(args)
+    args = {k: v for k, v in args.items() if v is not None}
+    
+    PATH = args['path_data']
+    
+    df_train, df_valid, df_test = split_data(PATH, args['sampling'])
     device = check_gpu()
 
     transform = transforms.Compose([
         # transforms.ToTensor(),
-        # transforms.RandomRotation(30),
-        # transforms.GaussianBlur(3),
+        transforms.RandomRotation(30),
+        transforms.GaussianBlur(3),
         # transforms.RandomAffine((1, 30)),
-        # transforms.RandomHorizontalFlip(0.3),
+        transforms.RandomHorizontalFlip(0.3),
         # transforms.CenterCrop((224, 224)) if random.random() <= 0.3 else ,
         transforms.Resize((224, 224)),
         transforms.ToTensor()
@@ -94,18 +106,17 @@ def main():
     valid_loader = torch.utils.data.DataLoader(valid_data,
                                                batch_size=64)
     test_loader = torch.utils.data.DataLoader(test_data,
-                                               batch_size=64)
+                                              batch_size=64)
 
-    model = timm.create_model(
-        'hf-hub:timm/eca_nfnet_l0', pretrained=True, num_classes=6)
+    model = timm.create_model(args['model_name'], pretrained=True, num_classes=6)
 
-    trainer = Trainer(model=model, 
-                      train_loader=train_loader, 
-                      valid_loader=valid_loader, 
-                      test_loader=test_loader, 
-                      epochs=10, 
-                      max_lr=1e-4, 
-                      device=device, 
+    trainer = Trainer(model=model,
+                      train_loader=train_loader,
+                      valid_loader=valid_loader,
+                      test_loader=test_loader,
+                      epochs=10,
+                      max_lr=1e-4,
+                      device=device,
                       print_every=2)
     trainer.train()
 

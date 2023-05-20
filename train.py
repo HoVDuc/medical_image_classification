@@ -73,6 +73,7 @@ def main():
     parser.add_argument('--model_name', type=str)
     parser.add_argument('--path_data', type=str, default='../Data_classification/')
     parser.add_argument('--num_epochs', type=int, default=30)
+    parser.add_argument('--loss_function', type=str, default='ce')
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--sampling', action='store_true')
     

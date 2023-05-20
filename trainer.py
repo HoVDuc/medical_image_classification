@@ -56,7 +56,7 @@ class Trainer:
         return metric(preds, targets)
     
     def mean_average_precision(self, preds, targets):
-        average_precision = torchmetrics.AveragePrecision(task="multiclass", num_classes=6, average=None).to(self.device)
+        average_precision = torchmetrics.AveragePrecision(task="multiclass", num_classes=6, average="macro", thresholds=5).to(self.device)
         ap = average_precision(preds, targets)
         mAP = 1/6 * sum(ap)
         return mAP

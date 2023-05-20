@@ -4,6 +4,7 @@ import torchmetrics
 from torch.optim.lr_scheduler import OneCycleLR
 from tqdm import tqdm
 from loss.focal_loss import FocalLoss
+from torchmetrics.classification import MulticlassPrecision, MulticlassRecall
 
 
 class Trainer:
@@ -21,7 +22,7 @@ class Trainer:
             params=self.model.parameters())
         self.scheduler = OneCycleLR(self.optim, self.lr, self.epochs)
         # self.criterion = nn.CrossEntropyLoss()
-        self.criterion = FocalLoss(gamma=2.0, alpha=0.2)
+        self.criterion = FocalLoss(gamma=2.0)
 
     def check_device(self):
         return 'cuda:0' if torch.cuda.is_available() else 'cpu'
@@ -46,37 +47,57 @@ class Trainer:
         f1 = torchmetrics.F1Score(task='multiclass', num_classes=6).to(self.device)
         return f1(preds, targets)
     
+    def precision(self, preds, targets):
+        metric = MulticlassPrecision(num_classes=6)
+        return metric(preds, targets)
+    
+    def recall(self, preds, targets):
+        metric = MulticlassRecall(num_classes=6)
+        return metric(preds, targets)
+    
     def mean_average_precision(self, preds, targets):
         average_precision = torchmetrics.AveragePrecision(task="multiclass", num_classes=6, average=None).to(self.device)
         ap = average_precision(preds, targets)
         mAP = 1/6 * sum(ap)
         return mAP
 
-    def validation(self):
+    def validation(self, mode='val'):
         self.model.eval()
-        val_total_loss = 0
-        # val_total_accuracy = 0
-        val_total_f1_scores = 0
-        val_total_map = 0
+        total_loss = 0
+        # total_accuracy = 0
+        total_f1_scores = 0
+        total_map = 0
+        total_precision = 0
+        total_recall = 0
+        
+        data_loader = self.valid_loader if mode == 'val' else self.test_loader
         with torch.no_grad():
-            for batch in self.valid_loader:
-                val_inputs, val_targets = batch
-                val_pred = self.model(val_inputs)
-                val_loss = self.criterion(val_pred, val_targets)
-                val_total_loss += val_loss
-                accuracy = self.calc_accuracy(val_pred, val_targets)
-                f1_scores = self.f1_scores(val_pred, val_targets)
-                mAP = self.mean_average_precision(val_pred, val_targets)
-                # val_total_accuracy += accuracy
-                val_total_f1_scores += f1_scores
-                val_total_map += mAP
+            for batch in data_loader:
+                inputs, targets = batch
+                pred = self.model(inputs)
+                loss = self.criterion(pred, targets)
+                total_loss += loss
+                # calc metrics
+                # accuracy = self.calc_accuracy(pred, targets)
+                f1_scores = self.f1_scores(pred, targets)
+                mAP = self.mean_average_precision(pred, targets)
+                precision = self.precision(pred, targets)
+                recall = self.recall(pred, targets)
+                # calc total metrics
+                # total_accuracy += accuracy
+                total_f1_scores += f1_scores
+                total_map += mAP
+                total_precision += precision
+                total_recall += recall
+                
+            avg_loss = total_loss / len(data_loader)
+            # avg_accuracy = total_accuracy / len(data_loader)
+            avg_f1_scores = total_f1_scores / len(data_loader)
+            avg_map = total_map / len(data_loader)
+            avg_precision = total_precision / len(data_loader)
+            avg_recall = total_recall / len(data_loader)
 
-            avg_val_loss = val_total_loss / len(self.valid_loader)
-            # avg_val_accuracy = val_total_accuracy / len(self.valid_loader)
-            avg_val_f1_scores = val_total_f1_scores / len(self.valid_loader)
-            avg_val_map = val_total_map / len(self.valid_loader)
-
-        return avg_val_loss, avg_val_f1_scores, avg_val_map
+        return avg_loss, avg_f1_scores, avg_map, avg_precision, avg_recall
     
     def train(self):
         for epoch in range(1, self.epochs + 1):
@@ -92,7 +113,10 @@ class Trainer:
             avg_loss = total_loss / len(self.train_loader)
 
             if epoch % self.print_every == 0:
-                avg_val_loss, avg_val_f1_scores, avg_val_map = self.validation()
+                avg_val_loss, avg_val_f1_scores, avg_val_map, avg_val_precision, avg_val_recall = self.validation(mode='val')
 
-                print("loss: {} - val_loss: {} - f1_scores: {} - mAP: {}".format(
-                    avg_loss, avg_val_loss, avg_val_f1_scores, avg_val_map))
+                print("loss: {} - val_loss: {} - f1_scores: {} - mAP: {} - precision: {} - recall: {}".format(
+                    avg_loss, avg_val_loss, avg_val_f1_scores, avg_val_map, avg_val_precision, avg_val_recall))
+        avg_test_loss, avg_test_f1_scores, avg_test_map, avg_test_precision, avg_test_recall = self.validation(mode='test')
+        print("test_loss: {} - f1_scores: {} - mAP: {} - precision: {}: recall".format(
+                        avg_test_loss, avg_test_f1_scores, avg_test_map, avg_test_precision, avg_test_recall))

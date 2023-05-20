@@ -118,5 +118,5 @@ class Trainer:
                 print("loss: {} - val_loss: {} - f1_scores: {} - mAP: {} - precision: {} - recall: {}".format(
                     avg_loss, avg_val_loss, avg_val_f1_scores, avg_val_map, avg_val_precision, avg_val_recall))
         avg_test_loss, avg_test_f1_scores, avg_test_map, avg_test_precision, avg_test_recall = self.validation(mode='test')
-        print("test_loss: {} - f1_scores: {} - mAP: {} - precision: {}: recall".format(
+        print("test_loss: {} - f1_scores: {} - mAP: {} - precision: {}: recall: {}".format(
                         avg_test_loss, avg_test_f1_scores, avg_test_map, avg_test_precision, avg_test_recall))

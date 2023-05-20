@@ -48,18 +48,17 @@ class Trainer:
         return f1(preds, targets)
     
     def precision(self, preds, targets):
-        metric = MulticlassPrecision(num_classes=6)
+        metric = MulticlassPrecision(num_classes=6).to(self.device)
         return metric(preds, targets)
     
     def recall(self, preds, targets):
-        metric = MulticlassRecall(num_classes=6)
+        metric = MulticlassRecall(num_classes=6).to(self.device)
         return metric(preds, targets)
     
     def mean_average_precision(self, preds, targets):
         average_precision = torchmetrics.AveragePrecision(task="multiclass", num_classes=6, average="macro", thresholds=5).to(self.device)
         ap = average_precision(preds, targets)
-        mAP = 1/6 * sum(ap)
-        return mAP
+        return ap
 
     def validation(self, mode='val'):
         self.model.eval()

@@ -5,6 +5,7 @@ from torch.optim.lr_scheduler import OneCycleLR
 from tqdm import tqdm
 from loss.focal_loss import FocalLoss
 from torchmetrics.classification import MulticlassPrecision, MulticlassRecall
+from torch.utils.tensorboard import SummaryWriter
 
 
 class Trainer:
@@ -23,6 +24,7 @@ class Trainer:
         self.scheduler = OneCycleLR(self.optim, self.lr, self.epochs)
         # self.criterion = nn.CrossEntropyLoss()
         self.criterion = FocalLoss(gamma=2.0)
+        self.writer = SummaryWriter('runs/Medical/trying_tensorboard')
 
     def check_device(self):
         return 'cuda:0' if torch.cuda.is_available() else 'cpu'
@@ -44,19 +46,21 @@ class Trainer:
 
     def f1_scores(self, preds, targets):
         preds = torch.argmax(preds, dim=1)
-        f1 = torchmetrics.F1Score(task='multiclass', num_classes=6).to(self.device)
+        f1 = torchmetrics.F1Score(
+            task='multiclass', num_classes=6).to(self.device)
         return f1(preds, targets)
-    
+
     def precision(self, preds, targets):
         metric = MulticlassPrecision(num_classes=6).to(self.device)
         return metric(preds, targets)
-    
+
     def recall(self, preds, targets):
         metric = MulticlassRecall(num_classes=6).to(self.device)
         return metric(preds, targets)
-    
+
     def mean_average_precision(self, preds, targets):
-        average_precision = torchmetrics.AveragePrecision(task="multiclass", num_classes=6, average="macro", thresholds=5).to(self.device)
+        average_precision = torchmetrics.AveragePrecision(
+            task="multiclass", num_classes=6, average="macro", thresholds=5).to(self.device)
         ap = average_precision(preds, targets)
         return ap
 
@@ -68,7 +72,7 @@ class Trainer:
         total_map = 0
         total_precision = 0
         total_recall = 0
-        
+
         data_loader = self.valid_loader if mode == 'val' else self.test_loader
         with torch.no_grad():
             for batch in data_loader:
@@ -88,7 +92,7 @@ class Trainer:
                 total_map += mAP
                 total_precision += precision
                 total_recall += recall
-                
+
             avg_loss = total_loss / len(data_loader)
             # avg_accuracy = total_accuracy / len(data_loader)
             avg_f1_scores = total_f1_scores / len(data_loader)
@@ -97,8 +101,9 @@ class Trainer:
             avg_recall = total_recall / len(data_loader)
 
         return avg_loss, avg_f1_scores, avg_map, avg_precision, avg_recall
-    
+
     def train(self):
+        step = 0
         for epoch in range(1, self.epochs + 1):
             print("EPOCH: {}/{}".format(epoch, self.epochs))
             print('---' * 20)
@@ -110,12 +115,15 @@ class Trainer:
                 total_loss += loss
             self.scheduler.step()
             avg_loss = total_loss / len(self.train_loader)
-
+            self.writer.add_scalar('Training loss', avg_loss, global_step=step)
+            step += 1
             if epoch % self.print_every == 0:
-                avg_val_loss, avg_val_f1_scores, avg_val_map, avg_val_precision, avg_val_recall = self.validation(mode='val')
+                avg_val_loss, avg_val_f1_scores, avg_val_map, avg_val_precision, avg_val_recall = self.validation(
+                    mode='val')
 
                 print("loss: {} - val_loss: {} - f1_scores: {} - mAP: {} - precision: {} - recall: {}".format(
                     avg_loss, avg_val_loss, avg_val_f1_scores, avg_val_map, avg_val_precision, avg_val_recall))
-        avg_test_loss, avg_test_f1_scores, avg_test_map, avg_test_precision, avg_test_recall = self.validation(mode='test')
+        avg_test_loss, avg_test_f1_scores, avg_test_map, avg_test_precision, avg_test_recall = self.validation(
+            mode='test')
         print("test_loss: {} - f1_scores: {} - mAP: {} - precision: {}: recall: {}".format(
-                        avg_test_loss, avg_test_f1_scores, avg_test_map, avg_test_precision, avg_test_recall))
+            avg_test_loss, avg_test_f1_scores, avg_test_map, avg_test_precision, avg_test_recall))

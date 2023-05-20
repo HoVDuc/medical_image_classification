@@ -3,6 +3,7 @@ import torch.nn as nn
 import torchmetrics
 from torch.optim.lr_scheduler import OneCycleLR
 from tqdm import tqdm
+from loss.focal_loss import FocalLoss
 
 
 class Trainer:
@@ -19,7 +20,8 @@ class Trainer:
         self.optim = torch.optim.Adam(
             params=self.model.parameters())
         self.scheduler = OneCycleLR(self.optim, self.lr, self.epochs)
-        self.criterion = nn.CrossEntropyLoss()
+        # self.criterion = nn.CrossEntropyLoss()
+        self.criterion = FocalLoss(gamma=2.0, alpha=0.2)
 
     def check_device(self):
         return 'cuda:0' if torch.cuda.is_available() else 'cpu'

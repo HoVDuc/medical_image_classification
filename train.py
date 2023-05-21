@@ -146,6 +146,7 @@ def main():
                           valid_loader=valid_loader,
                           test_loader=test_loader,
                           kfold=kfold)
+            print(train_data.class2index)
 
     else:
         df_train, df_valid, df_test = split_data(PATH, args['sampling'])

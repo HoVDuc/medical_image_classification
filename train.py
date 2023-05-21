@@ -76,6 +76,10 @@ def main():
     parser.add_argument('--loss_function', type=str, default='ce')
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--sampling', action='store_true')
+    parser.add_argument('--save_dir', type=str, default='./save/')
+    parser.add_argument('--save_name', type=str, default='model.pt')
+    parser.add_argument('--load_dir', type=str, default='')
+    parser.add_argument('--print_every', type=int, default=5)
     
     args = parser.parse_args()
     args = vars(args)
@@ -83,6 +87,9 @@ def main():
     
     PATH = args['path_data']
     
+    if not os.path.isdir(args['save_dir']):
+        os.mkdir(args['save_dir'])
+        
     df_train, df_valid, df_test = split_data(PATH, args['sampling'])
     device = check_gpu()
 
@@ -115,12 +122,17 @@ def main():
                       train_loader=train_loader,
                       valid_loader=valid_loader,
                       test_loader=test_loader,
-                      epochs=10,
-                      max_lr=1e-4,
+                      loss=args['loss_function'],
+                      epochs=args['num_epochs'],
+                      max_lr=args['lr'],
                       device=device,
-                      print_every=2)
-    trainer.train()
+                      print_every=args['print_every'])
 
+    if args['load_dir']:
+        trainer.load_model(args['load_dir'])
+        
+    trainer.train()
+    trainer.save_model(args['save_dir'] + args['save_name'])
 
 if __name__ == "__main__":
     main()

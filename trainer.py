@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 class Trainer:
 
-    def __init__(self, model, train_loader, valid_loader, test_loader, epochs, max_lr, device, print_every=5) -> None:
+    def __init__(self, model, train_loader, valid_loader, test_loader, loss, epochs, max_lr, device, print_every=5) -> None:
         self.device = device
         self.model = model.to(self.device)
         self.train_loader = train_loader
@@ -22,8 +22,11 @@ class Trainer:
         self.optim = torch.optim.Adam(
             params=self.model.parameters())
         self.scheduler = OneCycleLR(self.optim, self.lr, self.epochs)
-        # self.criterion = nn.CrossEntropyLoss()
-        self.criterion = FocalLoss(gamma=2.0)
+        loss_func = {
+            'ce': nn.CrossEntropyLoss(),
+            'focal': FocalLoss(gamma=2.0)
+        }
+        self.criterion = loss_func[loss]
         self.writer = SummaryWriter('runs/Medical/trying_tensorboard')
 
     def check_device(self):
@@ -101,6 +104,14 @@ class Trainer:
             avg_recall = total_recall / len(data_loader)
 
         return avg_loss, avg_f1_scores, avg_map, avg_precision, avg_recall
+
+    def save_model(self, save_path):
+        torch.save(self.model.state_dict(), save_path)
+        print('Saved!')
+
+    def load_model(self, save_path):
+        self.model.load_state_dict(torch.load(save_path))
+        print('Loaded!')
 
     def train(self):
         step = 0

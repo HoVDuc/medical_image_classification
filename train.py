@@ -72,7 +72,7 @@ def kfold_split(PATH):
     df = pd.DataFrame(data)
     df_sample = df.sample(frac=1).reset_index(drop=True)
     kfold = KFold()
-    return df_sample, kfold.split(df_sample)
+    return df_sample, kfold
 
 
 def check_gpu():
@@ -107,12 +107,6 @@ def main():
 
     model = timm.create_model(
         args['model_name'], pretrained=True, num_classes=6)
-    trainer = Trainer(model=model,
-                      loss=args['loss_function'],
-                      epochs=args['num_epochs'],
-                      max_lr=args['lr'],
-                      device=device,
-                      print_every=args['print_every'])
 
     transform = transforms.Compose([
         # transforms.ToTensor(),
@@ -127,7 +121,18 @@ def main():
 
     if args['use_kfold']:
         df, kfold = kfold_split(PATH)
-        for train_indices, valid_indices in kfold:
+        
+        trainer = Trainer(model=model,
+                      loss=args['loss_function'],
+                      epochs=args['num_epochs'],
+                      max_lr=args['lr'],
+                      device=device,
+                      num_samples=len(df),
+                      kfold=kfold.get_n_splits(df),
+                      print_every=args['print_every'])
+        
+        for i, (train_indices, valid_indices) in enumerate(kfold.split(df)):
+            print('Fold:', i)
             df_train = df.loc[train_indices]
             df_valid = df.loc[valid_indices]
             train_data = MedicalData(PATH, df_train, device, transform)
@@ -139,10 +144,20 @@ def main():
             test_loader = None
             trainer.train(train_loader=train_loader,
                           valid_loader=valid_loader,
-                          test_loader=test_loader)
+                          test_loader=test_loader,
+                          kfold=kfold)
 
     else:
         df_train, df_valid, df_test = split_data(PATH, args['sampling'])
+        
+        trainer = Trainer(model=model,
+                      loss=args['loss_function'],
+                      epochs=args['num_epochs'],
+                      max_lr=args['lr'],
+                      device=device,
+                      num_samples=len(df_train),
+                      print_every=args['print_every'])
+        
         train_data = MedicalData(PATH, df_train, device, transform)
         valid_data = MedicalData(PATH, df_valid, device, transform)
         test_data = MedicalData(PATH, df_test, device, transform)

@@ -18,7 +18,7 @@ class Trainer:
         self.print_every = print_every
         self.optim = torch.optim.Adam(
             params=self.model.parameters())
-        self.scheduler = OneCycleLR(self.optim, self.lr, self.epochs)
+        self.scheduler = OneCycleLR(self.optim, self.lr, self.epochs*1000)
         loss_func = {
             'ce': nn.CrossEntropyLoss(),
             'focal': FocalLoss(gamma=2.0)
@@ -42,6 +42,7 @@ class Trainer:
         self.optim.zero_grad()
         loss.backward()
         self.optim.step()
+        self.scheduler.step()
         return loss.item()
 
     def f1_scores(self, preds, targets):
@@ -76,7 +77,7 @@ class Trainer:
         total_map = 0
         total_precision = 0
         total_recall = 0
-        total_cf = torch.zeros(torch.Size([6, 6 ]))
+        total_cf = torch.zeros(torch.Size([6, 6 ]), device=self.device)
 
         data_loader = self.valid_loader if mode == 'val' else self.test_loader
         with torch.no_grad():
@@ -131,7 +132,6 @@ class Trainer:
                 loss = self.training_step(batch)
                 pbar.set_description('loss: {}'.format(loss))
                 total_loss += loss
-            self.scheduler.step()
             avg_loss = total_loss / len(self.train_loader)
             self.writer.add_scalar('Training loss', avg_loss, global_step=step)
             step += 1

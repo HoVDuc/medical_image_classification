@@ -132,7 +132,7 @@ def main():
                       print_every=args['print_every'])
         
         for i, (train_indices, valid_indices) in enumerate(kfold.split(df)):
-            print('Fold:', i)
+            print('Fold:', i+1)
             df_train = df.loc[train_indices]
             df_valid = df.loc[valid_indices]
             train_data = MedicalData(PATH, df_train, device, transform)
@@ -176,7 +176,6 @@ def main():
     if args['load_dir']:
         trainer.load_model(args['load_dir'])
 
-    trainer.train()
     trainer.save_model(args['save_dir'] + args['save_name'])
 
 

@@ -14,7 +14,10 @@ import pathlib
 import random
 import os
 import sys
+from sklearn.model_selection import KFold
+
 sys.path.append('./pytorch_model/')
+
 
 def load_data(PATH):
     folders = glob.glob(PATH + "/*/")
@@ -64,6 +67,14 @@ def split_data(PATH, sampling=False):
     return df_train, df_valid, df_test
 
 
+def kfold_split(PATH):
+    data = load_data(PATH)
+    df = pd.DataFrame(data)
+    df_sample = df.sample(frac=1).reset_index(drop=True)
+    kfold = KFold()
+    return df_sample, kfold.split(df_sample)
+
+
 def check_gpu():
     return 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
@@ -71,7 +82,8 @@ def check_gpu():
 def main():
     parser = argparse.ArgumentParser(description='Classification training')
     parser.add_argument('--model_name', type=str)
-    parser.add_argument('--path_data', type=str, default='../Data_classification/')
+    parser.add_argument('--path_data', type=str,
+                        default='../Data_classification/')
     parser.add_argument('--num_epochs', type=int, default=30)
     parser.add_argument('--loss_function', type=str, default='ce')
     parser.add_argument('--lr', type=float, default=1e-4)
@@ -80,18 +92,27 @@ def main():
     parser.add_argument('--save_name', type=str, default='model.pt')
     parser.add_argument('--load_dir', type=str, default='')
     parser.add_argument('--print_every', type=int, default=5)
-    
+    parser.add_argument('--use_kfold', action='store_true')
+
     args = parser.parse_args()
     args = vars(args)
     args = {k: v for k, v in args.items() if v is not None}
-    
+
     PATH = args['path_data']
-    
+
     if not os.path.isdir(args['save_dir']):
         os.mkdir(args['save_dir'])
-        
-    df_train, df_valid, df_test = split_data(PATH, args['sampling'])
+
     device = check_gpu()
+
+    model = timm.create_model(
+        args['model_name'], pretrained=True, num_classes=6)
+    trainer = Trainer(model=model,
+                      loss=args['loss_function'],
+                      epochs=args['num_epochs'],
+                      max_lr=args['lr'],
+                      device=device,
+                      print_every=args['print_every'])
 
     transform = transforms.Compose([
         # transforms.ToTensor(),
@@ -104,35 +125,44 @@ def main():
         transforms.ToTensor()
     ])
 
-    train_data = MedicalData(PATH, df_train, device, transform)
-    valid_data = MedicalData(PATH, df_valid, device, transform)
-    test_data = MedicalData(PATH, df_test, device, transform)
+    if args['use_kfold']:
+        df, kfold = kfold_split(PATH)
+        for train_indices, valid_indices in kfold:
+            df_train = df.loc[train_indices]
+            df_valid = df.loc[valid_indices]
+            train_data = MedicalData(PATH, df_train, device, transform)
+            valid_data = MedicalData(PATH, df_valid, device, transform)
+            train_loader = torch.utils.data.DataLoader(train_data,
+                                                       batch_size=64)
+            valid_loader = torch.utils.data.DataLoader(valid_data,
+                                                       batch_size=64)
+            test_loader = None
+            trainer.train(train_loader=train_loader,
+                          valid_loader=valid_loader,
+                          test_loader=test_loader)
 
-    train_loader = torch.utils.data.DataLoader(train_data,
-                                               batch_size=64,
-                                               shuffle=True)
-    valid_loader = torch.utils.data.DataLoader(valid_data,
-                                               batch_size=64)
-    test_loader = torch.utils.data.DataLoader(test_data,
-                                              batch_size=64)
-
-    model = timm.create_model(args['model_name'], pretrained=True, num_classes=6)
-
-    trainer = Trainer(model=model,
-                      train_loader=train_loader,
+    else:
+        df_train, df_valid, df_test = split_data(PATH, args['sampling'])
+        train_data = MedicalData(PATH, df_train, device, transform)
+        valid_data = MedicalData(PATH, df_valid, device, transform)
+        test_data = MedicalData(PATH, df_test, device, transform)
+        train_loader = torch.utils.data.DataLoader(train_data,
+                                                   batch_size=64,
+                                                   shuffle=True)
+        valid_loader = torch.utils.data.DataLoader(valid_data,
+                                                   batch_size=64)
+        test_loader = torch.utils.data.DataLoader(test_data,
+                                                  batch_size=64)
+        trainer.train(train_loader=train_loader,
                       valid_loader=valid_loader,
-                      test_loader=test_loader,
-                      loss=args['loss_function'],
-                      epochs=args['num_epochs'],
-                      max_lr=args['lr'],
-                      device=device,
-                      print_every=args['print_every'])
+                      test_loader=test_loader)
 
     if args['load_dir']:
         trainer.load_model(args['load_dir'])
-        
+
     trainer.train()
     trainer.save_model(args['save_dir'] + args['save_name'])
+
 
 if __name__ == "__main__":
     main()

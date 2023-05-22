@@ -22,6 +22,7 @@ class Trainer:
         }
         self.criterion = loss_func[loss]
                 
+        print(self.epochs*num_samples*kfold)
         # Optimizer
         self.optim = torch.optim.Adam(params=self.model.parameters())
         self.scheduler = OneCycleLR(optimizer=self.optim, 
@@ -149,7 +150,8 @@ class Trainer:
                 print('Confusion Matrix:\n', cf)
 
         if self.test_loader:
-            avg_test_loss, avg_test_f1_scores, avg_test_map, avg_test_precision, avg_test_recall = self.validation(
+            avg_test_loss, avg_test_f1_scores, avg_test_map, avg_test_precision, avg_test_recall, cf = self.validation(
                 mode='test')
             print("test_loss: {} - f1_scores: {} - mAP: {} - precision: {}: recall: {}".format(
                 avg_test_loss, avg_test_f1_scores, avg_test_map, avg_test_precision, avg_test_recall))
+            print('Confusion Matrix:\n', cf)

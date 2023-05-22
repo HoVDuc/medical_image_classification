@@ -5,16 +5,16 @@ from PIL import Image
 
 class MedicalData(Dataset):
 
-    def __init__(self, path, df, device, transform=None):
+    def __init__(self, path, df, classes, device, transform=None):
         self.df = df.to_numpy()
-        self.convert_labels(df)
+        classes = classes['class'].to_list()
+        self.convert_labels(classes)
         self.device = device
         self.path = path
         self.transform = transform
 
-    def convert_labels(self, df):
-        labels = set(df['label'])
-        self.class2index = {label: idx for idx, label in enumerate(labels)}
+    def convert_labels(self, classes):
+        self.class2index = {label: idx for idx, label in enumerate(classes)}
 
     def __len__(self):
         return len(self.df)

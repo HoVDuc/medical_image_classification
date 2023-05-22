@@ -101,6 +101,7 @@ def main():
     parser.add_argument('--load_dir', type=str, default='')
     parser.add_argument('--print_every', type=int, default=5)
     parser.add_argument('--use_kfold', action='store_true')
+    parser.add_argument('--batch_size', type=int, default=32)
 
     args = parser.parse_args()
     args = vars(args)
@@ -148,9 +149,9 @@ def main():
             train_data = MedicalData(PATH, df_train, classes, device, transform)
             valid_data = MedicalData(PATH, df_valid, classes, device, transform)
             train_loader = torch.utils.data.DataLoader(train_data,
-                                                       batch_size=64)
+                                                       batch_size=args['batch_size'])
             valid_loader = torch.utils.data.DataLoader(valid_data,
-                                                       batch_size=64)
+                                                       batch_size=args['batch_size'])
 
             test_loader = None
             trainer.train(train_loader=train_loader,
@@ -174,12 +175,12 @@ def main():
         valid_data = MedicalData(PATH, df_valid, classes, device, transform)
         test_data = MedicalData(PATH, df_test, classes, device, transform)
         train_loader = torch.utils.data.DataLoader(train_data,
-                                                   batch_size=64,
+                                                   batch_size=args['batch_size'],
                                                    shuffle=True)
         valid_loader = torch.utils.data.DataLoader(valid_data,
-                                                   batch_size=64)
+                                                   batch_size=args['batch_size'])
         test_loader = torch.utils.data.DataLoader(test_data,
-                                                  batch_size=64)
+                                                  batch_size=args['batch_size'])
         trainer.train(train_loader=train_loader,
                       valid_loader=valid_loader,
                       test_loader=test_loader)

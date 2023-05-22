@@ -16,8 +16,6 @@ import os
 import sys
 from sklearn.model_selection import KFold
 
-sys.path.append('./pytorch_model/')
-
 
 def load_data(PATH):
     folders = glob.glob(PATH + "/*/")
@@ -31,8 +29,20 @@ def load_data(PATH):
         for file in files:
             data['file'].append(file)
             data['label'].append(pathlib.PurePath(folder).name)
+            
+    df = pd.DataFrame(data)
+    
+    if not os.path.isfile('./class.csv'):
+        data_classes = {
+            'class': []
+        }
+        for i, label in enumerate(set(df['label'])):
+            data_classes['class'].append(label)
+        
+        df_class = pd.DataFrame(data_classes)
+        df_class.to_csv('./class.csv', index=False)
 
-    return data
+    return df
 
 
 def undersampling(df):
@@ -47,8 +57,7 @@ def undersampling(df):
 
 
 def split_data(PATH, sampling=False):
-    data = load_data(PATH)
-    df = pd.DataFrame(data)
+    df = load_data(PATH)
 
     if sampling:
         df = undersampling(df)
@@ -68,8 +77,7 @@ def split_data(PATH, sampling=False):
 
 
 def kfold_split(PATH):
-    data = load_data(PATH)
-    df = pd.DataFrame(data)
+    df = load_data(PATH)
     df_sample = df.sample(frac=1).reset_index(drop=True)
     kfold = KFold()
     return df_sample, kfold
@@ -119,8 +127,10 @@ def main():
         transforms.ToTensor()
     ])
 
+    
     if args['use_kfold']:
         df, kfold = kfold_split(PATH)
+        classes = pd.read_csv('./class.csv')
         
         trainer = Trainer(model=model,
                       loss=args['loss_function'],
@@ -135,12 +145,13 @@ def main():
             print('Fold:', i+1)
             df_train = df.loc[train_indices]
             df_valid = df.loc[valid_indices]
-            train_data = MedicalData(PATH, df_train, device, transform)
-            valid_data = MedicalData(PATH, df_valid, device, transform)
+            train_data = MedicalData(PATH, df_train, classes, device, transform)
+            valid_data = MedicalData(PATH, df_valid, classes, device, transform)
             train_loader = torch.utils.data.DataLoader(train_data,
                                                        batch_size=64)
             valid_loader = torch.utils.data.DataLoader(valid_data,
                                                        batch_size=64)
+
             test_loader = None
             trainer.train(train_loader=train_loader,
                           valid_loader=valid_loader,
@@ -150,7 +161,7 @@ def main():
 
     else:
         df_train, df_valid, df_test = split_data(PATH, args['sampling'])
-        
+        classes = pd.read_csv('./class.csv')
         trainer = Trainer(model=model,
                       loss=args['loss_function'],
                       epochs=args['num_epochs'],
@@ -159,9 +170,9 @@ def main():
                       num_samples=len(df_train),
                       print_every=args['print_every'])
         
-        train_data = MedicalData(PATH, df_train, device, transform)
-        valid_data = MedicalData(PATH, df_valid, device, transform)
-        test_data = MedicalData(PATH, df_test, device, transform)
+        train_data = MedicalData(PATH, df_train, classes, device, transform)
+        valid_data = MedicalData(PATH, df_valid, classes, device, transform)
+        test_data = MedicalData(PATH, df_test, classes, device, transform)
         train_loader = torch.utils.data.DataLoader(train_data,
                                                    batch_size=64,
                                                    shuffle=True)

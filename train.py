@@ -114,9 +114,6 @@ def main():
 
     device = check_gpu()
 
-    model = timm.create_model(
-        args['model_name'], pretrained=True, num_classes=6)
-
     transform = transforms.Compose([
         # transforms.ToTensor(),
         transforms.RandomRotation(30),
@@ -132,8 +129,11 @@ def main():
     if args['use_kfold']:
         df, kfold = kfold_split(PATH)
         classes = pd.read_csv('./class.csv')
-        
-        trainer = Trainer(model=model,
+        num_classes = len(classes)
+        model = timm.create_model(args['model_name'], pretrained=True, num_classes=num_classes)
+        for i, (train_indices, valid_indices) in enumerate(kfold.split(df)):
+            print('Fold:', i+1)
+            trainer = Trainer(model=model, num_classes=num_classes,
                       loss=args['loss_function'],
                       epochs=args['num_epochs'],
                       max_lr=args['lr'],
@@ -141,9 +141,7 @@ def main():
                       num_samples=len(df),
                       kfold=kfold.get_n_splits(df),
                       print_every=args['print_every'])
-        
-        for i, (train_indices, valid_indices) in enumerate(kfold.split(df)):
-            print('Fold:', i+1)
+            
             df_train = df.loc[train_indices]
             df_valid = df.loc[valid_indices]
             train_data = MedicalData(PATH, df_train, classes, device, transform)
@@ -163,7 +161,9 @@ def main():
     else:
         df_train, df_valid, df_test = split_data(PATH, args['sampling'])
         classes = pd.read_csv('./class.csv')
-        trainer = Trainer(model=model,
+        num_classes = len(classes)
+        model = timm.create_model(args['model_name'], pretrained=True, num_classes=num_classes)
+        trainer = Trainer(model=model, num_classes=num_classes,
                       loss=args['loss_function'],
                       epochs=args['num_epochs'],
                       max_lr=args['lr'],

@@ -54,7 +54,6 @@ class Trainer:
         return loss.item()
 
     def f1_scores(self, preds, targets):
-        preds = torch.argmax(preds, dim=1)
         f1 = torchmetrics.F1Score(
             task='multiclass', num_classes=self.num_classes).to(self.device)
         return f1(preds, targets)
@@ -97,7 +96,6 @@ class Trainer:
         
         return loss.item(), pred, targets
     
-
     def validation(self, mode='val'):
         
         total_metrics = {
@@ -109,29 +107,29 @@ class Trainer:
         }
         total_cf = torch.zeros(torch.Size([self.num_classes, self.num_classes]), device=self.device)
         data_loader = self.valid_loader if mode == 'val' else self.test_loader
-
+        n_sample = len(data_loader)
         preds, targets = [], []
         
         with torch.no_grad():
             for i, batch in enumerate(data_loader):
                 loss, pred, target = self.validation_step(batch)
-                preds.append(pred.cpu().tolist())
+                f1_scores, mAP, precision, recall, confusion_matrix = self.metrics(pred, target)
+                total_metrics['loss'] += loss
+                total_metrics['f1_scores'] += f1_scores
+                total_metrics['precision'] += precision
+                total_metrics['mAP'] += mAP
+                total_metrics['recall'] += recall
+                total_cf += confusion_matrix
+
+                preds.append(torch.argmax(pred, dim=1).cpu().tolist())
                 targets.append(target.cpu().tolist())
             
             preds = list(itertools.chain(*preds))
             targets = list(itertools.chain(*targets))
-            
+
             self.display_classification_report(preds, targets)
-            f1_scores, mAP, precision, recall, confusion_matrix = self.metrics(preds, targets)
-            total_metrics['loss'] += loss
-            total_metrics['f1_scores'] += f1_scores
-            total_metrics['precision'] += precision
-            total_metrics['mAP'] += mAP
-            total_metrics['recall'] += recall
-            total_cf += confusion_matrix
-
-
-        return total_metrics, total_cf
+            avg = {metric: total_metrics[metric] / n_sample for metric in total_metrics}
+        return avg, total_cf
 
     def save_model(self, save_path):
         torch.save(self.model.state_dict(), save_path)

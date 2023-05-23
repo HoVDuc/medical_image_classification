@@ -8,6 +8,7 @@ from torchmetrics.classification import MulticlassPrecision, MulticlassRecall, M
 from torch.utils.tensorboard import SummaryWriter
 import pandas as pd
 from sklearn.metrics import classification_report
+import itertools
 
 
 class Trainer:
@@ -109,17 +110,17 @@ class Trainer:
         total_cf = torch.zeros(torch.Size([self.num_classes, self.num_classes]), device=self.device)
         data_loader = self.valid_loader if mode == 'val' else self.test_loader
 
-        batch_size = len(next(iter(data_loader))[1])
-        preds, targets = torch.zeros(len(data_loader), batch_size), torch.zeros(len(data_loader), batch_size)
+        preds, targets = [], []
         
         with torch.no_grad():
             for i, batch in enumerate(data_loader):
                 loss, pred, target = self.validation_step(batch)
-                preds[i] = torch.argmax(pred, dim=1)
-                targets[i] = target
+                preds.append(pred.cpu().tolist())
+                targets.append(target.cpu().tolist())
             
-            preds = preds.flatten()
-            targets = targets.flatten()
+            preds = list(itertools.chain(*preds))
+            targets = list(itertools.chain(*targets))
+            
             self.display_classification_report(preds, targets)
             f1_scores, mAP, precision, recall, confusion_matrix = self.metrics(preds, targets)
             total_metrics['loss'] += loss

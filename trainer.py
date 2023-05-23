@@ -115,7 +115,7 @@ class Trainer:
         with torch.no_grad():
             for i, batch in enumerate(data_loader):
                 loss, pred, target = self.validation_step(batch)
-                preds[i] = pred
+                preds[i] = torch.argmax(pred, dim=1)
                 targets[i] = target
             
             preds = preds.flatten()

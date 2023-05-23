@@ -25,7 +25,6 @@ class Trainer:
         }
         self.criterion = loss_func[loss]
                 
-        print(self.epochs*num_samples*kfold)
         # Optimizer
         self.optim = torch.optim.Adam(params=self.model.parameters())
         self.scheduler = OneCycleLR(optimizer=self.optim, 
@@ -108,17 +107,19 @@ class Trainer:
             'recall': 0
         }
         total_cf = torch.zeros(torch.Size([self.num_classes, self.num_classes]), device=self.device)
-        preds, targets = [], []
-
         data_loader = self.valid_loader if mode == 'val' else self.test_loader
+
+        batch_size = len(next(iter(data_loader))[1])
+        preds, targets = torch.zeros(len(data_loader), batch_size), torch.zeros(len(data_loader), batch_size)
+        
         with torch.no_grad():
-            for batch in data_loader:
+            for i, batch in enumerate(data_loader):
                 loss, pred, target = self.validation_step(batch)
-                preds.append(pred)
-                targets.append(target)
+                preds[i] = pred
+                targets[i] = target
             
-            preds = torch.tensor(preds).flatten()
-            targets = torch.tensor(targets).flatten()
+            preds = preds.flatten()
+            targets = targets.flatten()
             self.display_classification_report(preds, targets)
             f1_scores, mAP, precision, recall, confusion_matrix = self.metrics(preds, targets)
             total_metrics['loss'] += loss

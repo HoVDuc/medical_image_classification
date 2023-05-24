@@ -29,16 +29,16 @@ def load_data(PATH):
         for file in files:
             data['file'].append(file)
             data['label'].append(pathlib.PurePath(folder).name)
-            
+
     df = pd.DataFrame(data)
-    
+
     if not os.path.isfile('./class.csv'):
         data_classes = {
             'class': []
         }
         for i, label in enumerate(set(df['label'])):
             data_classes['class'].append(label)
-        
+
         df_class = pd.DataFrame(data_classes)
         df_class.to_csv('./class.csv', index=False)
 
@@ -125,27 +125,30 @@ def main():
         transforms.ToTensor()
     ])
 
-    
     if args['use_kfold']:
         df, kfold = kfold_split(PATH)
         classes = pd.read_csv('./class.csv')
         num_classes = len(classes)
-        model = timm.create_model(args['model_name'], pretrained=True, num_classes=num_classes)
         for i, (train_indices, valid_indices) in enumerate(kfold.split(df)):
             print('Fold:', i+1)
-            trainer = Trainer(model=model, num_classes=num_classes,
-                      loss=args['loss_function'],
-                      epochs=args['num_epochs'],
-                      max_lr=args['lr'],
-                      device=device,
-                      num_samples=len(df),
-                      kfold=kfold.get_n_splits(df),
-                      print_every=args['print_every'])
-            
+            model = timm.create_model(
+                args['model_name'], pretrained=True, num_classes=num_classes)
+            trainer = Trainer(model=model, 
+                              num_classes=num_classes,
+                              loss=args['loss_function'],
+                              epochs=args['num_epochs'],
+                              max_lr=args['lr'],
+                              device=device,
+                              num_samples=len(df),
+                              kfold=kfold.get_n_splits(df),
+                              print_every=args['print_every'])
+
             df_train = df.loc[train_indices]
             df_valid = df.loc[valid_indices]
-            train_data = MedicalData(PATH, df_train, classes, device, transform)
-            valid_data = MedicalData(PATH, df_valid, classes, device, transform)
+            train_data = MedicalData(
+                PATH, df_train, classes, device, transform)
+            valid_data = MedicalData(
+                PATH, df_valid, classes, device, transform)
             train_loader = torch.utils.data.DataLoader(train_data,
                                                        batch_size=args['batch_size'])
             valid_loader = torch.utils.data.DataLoader(valid_data,
@@ -162,15 +165,17 @@ def main():
         df_train, df_valid, df_test = split_data(PATH, args['sampling'])
         classes = pd.read_csv('./class.csv')
         num_classes = len(classes)
-        model = timm.create_model(args['model_name'], pretrained=True, num_classes=num_classes)
-        trainer = Trainer(model=model, num_classes=num_classes,
-                      loss=args['loss_function'],
-                      epochs=args['num_epochs'],
-                      max_lr=args['lr'],
-                      device=device,
-                      num_samples=len(df_train),
-                      print_every=args['print_every'])
-        
+        model = timm.create_model(
+            args['model_name'], pretrained=True, num_classes=num_classes)
+        trainer = Trainer(model=model, 
+                          num_classes=num_classes,
+                          loss=args['loss_function'],
+                          epochs=args['num_epochs'],
+                          max_lr=args['lr'],
+                          device=device,
+                          num_samples=len(df_train),
+                          print_every=args['print_every'])
+
         train_data = MedicalData(PATH, df_train, classes, device, transform)
         valid_data = MedicalData(PATH, df_valid, classes, device, transform)
         test_data = MedicalData(PATH, df_test, classes, device, transform)

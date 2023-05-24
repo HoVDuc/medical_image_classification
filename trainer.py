@@ -9,6 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 import pandas as pd
 from sklearn.metrics import classification_report
 import itertools
+import numpy as np
 
 
 class Trainer:
@@ -84,7 +85,7 @@ class Trainer:
         confusion_matrix = self.confusion_matrix(pred, targets)
         return f1_scores, mAP, precision, recall, confusion_matrix
     
-    def display_classification_report(preds, targets):
+    def display_classification_report(self, preds, targets):
         targets_name = pd.read_csv('./class.csv')['class'].to_list()
         print(classification_report(targets, preds, target_names=targets_name))
     
@@ -114,11 +115,11 @@ class Trainer:
             for i, batch in enumerate(data_loader):
                 loss, pred, target = self.validation_step(batch)
                 f1_scores, mAP, precision, recall, confusion_matrix = self.metrics(pred, target)
-                total_metrics['loss'] += loss
-                total_metrics['f1_scores'] += f1_scores
-                total_metrics['precision'] += precision
-                total_metrics['mAP'] += mAP
-                total_metrics['recall'] += recall
+                total_metrics['loss'] += np.round(loss, 3)
+                total_metrics['f1_scores'] += np.round(f1_scores.cpu().numpy(), 3)
+                total_metrics['precision'] += np.round(precision.cpu().numpy(), 3)
+                total_metrics['mAP'] += np.round(mAP.cpu().numpy(), 3)
+                total_metrics['recall'] += np.round(recall.cpu().numpy(), 3)
                 total_cf += confusion_matrix
 
                 preds.append(torch.argmax(pred, dim=1).cpu().tolist())
@@ -147,7 +148,7 @@ class Trainer:
         step = 0
         for epoch in range(1, self.epochs + 1):
             print("EPOCH: {}/{}".format(epoch, self.epochs))
-            print('---' * 20)
+            print('---' * 200)
             total_loss = 0
             pbar = tqdm(self.train_loader, ncols=100)
             for batch in pbar:

@@ -162,3 +162,5 @@ cython_debug/
 test.ipynb
 runs/
 data/
+save/
+class.csv

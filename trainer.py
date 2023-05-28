@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torchmetrics
@@ -5,36 +6,38 @@ from torch.optim.lr_scheduler import OneCycleLR
 from tqdm import tqdm
 from loss.focal_loss import FocalLoss
 from torchmetrics.classification import MulticlassPrecision, MulticlassRecall, MulticlassConfusionMatrix
-from torch.utils.tensorboard import SummaryWriter
 import pandas as pd
 from sklearn.metrics import classification_report
 import itertools
+import matplotlib.pyplot as plt
 import numpy as np
 
 
 class Trainer:
 
-    def __init__(self, model, num_classes, loss, epochs, max_lr, device, num_samples, kfold=1, print_every=5) -> None:
+    def __init__(self, model, config, train_loader, valid_loader, test_loader, device) -> None:
+        self.config = config
+        self.epochs = config['trainer']['epochs']
         self.device = device
         self.model = model.to(self.device)
-        self.num_classes = num_classes
-        self.epochs = epochs
-        self.lr = max_lr
-        self.print_every = print_every
+        self.num_classes = config['model']['num_classes']
+        self.lr = float(config['trainer']['lr'])
+        self.print_every = config['trainer']['print_every']
+        self.train_loader = train_loader
+        self.valid_loader = valid_loader
+        self.test_loader = test_loader
         loss_func = {
             'ce': nn.CrossEntropyLoss(),
             'focal': FocalLoss(gamma=2.0)
         }
-        self.criterion = loss_func[loss]
+        self.criterion = loss_func[config['loss']['name']]
                 
         # Optimizer
         self.optim = torch.optim.Adam(params=self.model.parameters())
         self.scheduler = OneCycleLR(optimizer=self.optim, 
                                     max_lr=self.lr, 
-                                    total_steps=self.epochs*num_samples*kfold)
+                                    total_steps=self.epochs*len(train_loader)*int(config['kfold']['num_fold']))
         
-        self.writer = SummaryWriter('runs/Medical/trying_tensorboard')
-
     def check_device(self):
         return 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
@@ -52,7 +55,8 @@ class Trainer:
         loss.backward()
         self.optim.step()
         self.scheduler.step()
-        return loss.item()
+        
+        return loss.item(), self.f1_scores(pred, targets).item()
 
     def f1_scores(self, preds, targets):
         f1 = torchmetrics.F1Score(
@@ -112,14 +116,14 @@ class Trainer:
         preds, targets = [], []
         
         with torch.no_grad():
-            for i, batch in enumerate(data_loader):
+            for batch in tqdm(data_loader, ncols=100):
                 loss, pred, target = self.validation_step(batch)
                 f1_scores, mAP, precision, recall, confusion_matrix = self.metrics(pred, target)
                 total_metrics['loss'] += np.round(loss, 3)
-                total_metrics['f1_scores'] += np.round(f1_scores.cpu().numpy(), 3)
-                total_metrics['precision'] += np.round(precision.cpu().numpy(), 3)
-                total_metrics['mAP'] += np.round(mAP.cpu().numpy(), 3)
-                total_metrics['recall'] += np.round(recall.cpu().numpy(), 3)
+                total_metrics['f1_scores'] += np.round(f1_scores.item(), 3)
+                total_metrics['precision'] += np.round(precision.item(), 3)
+                total_metrics['mAP'] += np.round(mAP.item(), 3)
+                total_metrics['recall'] += np.round(recall.item(), 3)
                 total_cf += confusion_matrix
 
                 preds.append(torch.argmax(pred, dim=1).cpu().tolist())
@@ -140,33 +144,62 @@ class Trainer:
         self.model.load_state_dict(torch.load(save_path))
         print('Loaded!')
 
-    def train(self, train_loader, valid_loader, test_loader, kfold=1):
-        self.train_loader = train_loader
-        self.valid_loader = valid_loader
-        self.test_loader = test_loader
-
-        step = 0
+    def train(self, kfold, save_dir):
+        self.history = {
+            'loss': [],
+            'val_loss': [],
+            'acc': [],
+            'val_acc': []
+        }
         for epoch in range(1, self.epochs + 1):
             print("EPOCH: {}/{}".format(epoch, self.epochs))
             print('---' * 200)
             total_loss = 0
+            total_f1_scores = 0
+            n_batch = len(self.train_loader)
             pbar = tqdm(self.train_loader, ncols=100)
             for batch in pbar:
-                loss = self.training_step(batch)
+                loss, f1_scores = self.training_step(batch)
                 pbar.set_description('loss: {}'.format(loss))
                 total_loss += loss
-            avg_loss = total_loss / len(self.train_loader)
-            self.writer.add_scalar('Training loss', avg_loss, global_step=step)
-            step += 1
-            if epoch % self.print_every == 0:
-                avg_val_metrics, cf = self.validation(
+                total_f1_scores += f1_scores
+            avg_loss = total_loss / n_batch
+            avg_val_metrics, cf = self.validation(
                     mode='val')
-
+            
+            self.history['loss'].append(avg_loss)
+            self.history['val_loss'].append(avg_val_metrics['loss'])
+            self.history['acc'].append(total_f1_scores / n_batch)
+            self.history['val_acc'].append(avg_val_metrics['f1_scores'])
+            if epoch % self.print_every == 0:
                 print('Avg loss:', avg_loss)
                 print('metrics:', avg_val_metrics)
                 print('Confusion Matrix:\n', cf)
-
+            
+            save_path = os.path.join(save_dir, 'model_fold{}_epoch{}.pt'.format(kfold, epoch))
+            self.save_model(save_path)
+            
         if self.test_loader:
             avg_test_metrics, cf = self.validation(mode='test')
             print('metrics test:', avg_test_metrics)
             print('Confusion Matrix:\n', cf)
+
+    def visualize(self, logs_dir, kfold):
+        def visual(type='loss'):
+            path_dir = os.path.join(logs_dir, '{}/'.format(type))
+            if not os.path.isdir(path_dir):
+                os.mkdir(path_dir)
+            
+            val_key = 'val_{}'.format(type)
+            plt.plot(self.history[type], label=type)
+            plt.plot(self.history[val_key], label=val_key)
+            plt.legend()
+            plt.grid(True)
+            plt.savefig(os.path.join(path_dir, 'fig_fold_{}.jpg'.format(kfold)))
+            plt.clf()
+            print('Saveed! in ', logs_dir)
+            
+        visual('loss')
+        visual('acc')
+            
+        

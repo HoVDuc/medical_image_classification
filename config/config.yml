@@ -1,0 +1,25 @@
+use_gpu: true
+model:
+  name: timm/vit_small_patch16_224.dino
+  num_classes: 6
+  pretrained: true
+
+trainer:
+  epochs: 10
+  lr: 0.001
+  print_every: 5
+  total_step: 10*5*10000
+  save_dir: ./
+
+loss:
+  name: ce
+
+kfold: 
+  use_kfold: true
+  num_fold: 5
+
+datasets:
+  root: ../../Datasets/Classification/Data_classification/
+  image_width: 224
+  image_height: 224
+  batch_size: 10

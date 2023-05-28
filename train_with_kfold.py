@@ -46,7 +46,7 @@ def kfold_split(PATH, n_splits=5):
     df = load_data(PATH)
     df_sample = df.sample(frac=1).reset_index(drop=True)
     kfold = KFold(n_splits=n_splits)
-    return df_sample[:5000], kfold
+    return df_sample, kfold
 
 def check_gpu(use_gpu):
     return 'cuda:0' if torch.cuda.is_available() and use_gpu else 'cpu'

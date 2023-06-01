@@ -5,6 +5,7 @@ import torchmetrics
 from torch.optim.lr_scheduler import OneCycleLR
 from tqdm import tqdm
 from loss.focal_loss import FocalLoss
+from loss.class_balanced_loss import ClassBalanced
 from torchmetrics.classification import MulticlassPrecision, MulticlassRecall, MulticlassConfusionMatrix
 import pandas as pd
 from sklearn.metrics import classification_report
@@ -22,20 +23,22 @@ class Trainer:
         self.model = model.to(self.device)
         self.num_classes = config['model']['num_classes']
         self.lr = float(config['trainer']['lr'])
+        self.max_lr = float(config['trainer']['max_lr'])
         self.print_every = config['trainer']['print_every']
         self.train_loader = train_loader
         self.valid_loader = valid_loader
         self.test_loader = test_loader
         loss_func = {
             'ce': nn.CrossEntropyLoss(),
-            'focal': FocalLoss(gamma=2.0)
+            'focal': FocalLoss(gamma=2.0),
+            'cb': ClassBalanced(self.num_classes)
         }
         self.criterion = loss_func[config['loss']['name']]
                 
         # Optimizer
-        self.optim = torch.optim.Adam(params=self.model.parameters())
+        self.optim = torch.optim.AdamW(params=self.model.parameters(), lr=self.lr)
         self.scheduler = OneCycleLR(optimizer=self.optim, 
-                                    max_lr=self.lr, 
+                                    max_lr=self.max_lr, 
                                     total_steps=self.epochs*len(train_loader)*int(config['kfold']['num_fold']))
         
     def check_device(self):
@@ -56,8 +59,12 @@ class Trainer:
         self.optim.step()
         self.scheduler.step()
         
-        return loss.item(), self.f1_scores(pred, targets).item()
+        return loss.item(), self.accuracy(pred, targets).item()
 
+    def accuracy(self, preds, targets):
+        accuracy = torchmetrics.Accuracy('multiclass', num_classes=self.num_classes).to(self.device)
+        return accuracy(preds, targets)
+    
     def f1_scores(self, preds, targets):
         f1 = torchmetrics.F1Score(
             task='multiclass', num_classes=self.num_classes).to(self.device)
@@ -83,11 +90,12 @@ class Trainer:
     
     def metrics(self, pred, targets):
         f1_scores = self.f1_scores(pred, targets)
+        accuracy = self.accuracy(pred, targets)
         mAP = self.mean_average_precision(pred, targets)
         precision = self.precision(pred, targets)
         recall = self.recall(pred, targets)
         confusion_matrix = self.confusion_matrix(pred, targets)
-        return f1_scores, mAP, precision, recall, confusion_matrix
+        return accuracy, f1_scores, mAP, precision, recall, confusion_matrix
     
     def display_classification_report(self, preds, targets):
         targets_name = pd.read_csv('./class.csv')['class'].to_list()
@@ -105,6 +113,7 @@ class Trainer:
         
         total_metrics = {
             'loss': 0,
+            'accuracy': 0,
             'f1_scores': 0,
             'precision': 0,
             'mAP': 0,
@@ -118,8 +127,9 @@ class Trainer:
         with torch.no_grad():
             for batch in tqdm(data_loader, ncols=100):
                 loss, pred, target = self.validation_step(batch)
-                f1_scores, mAP, precision, recall, confusion_matrix = self.metrics(pred, target)
+                accuracy, f1_scores, mAP, precision, recall, confusion_matrix = self.metrics(pred, target)
                 total_metrics['loss'] += np.round(loss, 3)
+                total_metrics['accuracy'] += np.round(accuracy.item(), 3)
                 total_metrics['f1_scores'] += np.round(f1_scores.item(), 3)
                 total_metrics['precision'] += np.round(precision.item(), 3)
                 total_metrics['mAP'] += np.round(mAP.item(), 3)
@@ -132,7 +142,7 @@ class Trainer:
             preds = list(itertools.chain(*preds))
             targets = list(itertools.chain(*targets))
 
-            self.display_classification_report(preds, targets)
+            # self.display_classification_report(preds, targets)
             avg = {metric: total_metrics[metric] / n_sample for metric in total_metrics}
         return avg, total_cf
 
@@ -155,27 +165,33 @@ class Trainer:
             print("EPOCH: {}/{}".format(epoch, self.epochs))
             print('---' * 200)
             total_loss = 0
-            total_f1_scores = 0
+            total_accuracy = 0
             n_batch = len(self.train_loader)
             pbar = tqdm(self.train_loader, ncols=100)
             for batch in pbar:
-                loss, f1_scores = self.training_step(batch)
+                loss, accuracy = self.training_step(batch)
                 pbar.set_description('loss: {}'.format(loss))
                 total_loss += loss
-                total_f1_scores += f1_scores
+                total_accuracy += accuracy
             avg_loss = total_loss / n_batch
             avg_val_metrics, cf = self.validation(
                     mode='val')
-            
+            avg_accuracy = total_accuracy / n_batch
+
+            print('loss:', avg_loss)
+            print('val_loss:', avg_val_metrics['loss'])
+            print('acc:', avg_accuracy)
+            print('val_acc:', avg_val_metrics['accuracy'])
             self.history['loss'].append(avg_loss)
             self.history['val_loss'].append(avg_val_metrics['loss'])
-            self.history['acc'].append(total_f1_scores / n_batch)
-            self.history['val_acc'].append(avg_val_metrics['f1_scores'])
+            self.history['acc'].append(avg_accuracy)
+            self.history['val_acc'].append(avg_val_metrics['accuracy'])
             if epoch % self.print_every == 0:
                 print('Avg loss:', avg_loss)
                 print('metrics:', avg_val_metrics)
                 print('Confusion Matrix:\n', cf)
             
+            print(self.history)
             save_path = os.path.join(save_dir, 'model_fold{}_epoch{}.pt'.format(kfold, epoch))
             self.save_model(save_path)
             

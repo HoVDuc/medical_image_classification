@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torchvision
 import argparse
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, train_test_split
 from torchvision import transforms
 from dataloader import MedicalData
 from trainer import Trainer
@@ -111,42 +111,45 @@ def main():
         transforms.ToTensor()
     ])
 
-    df, kfold = kfold_split(PATH)
     classes = pd.read_csv('./class.csv')
     cfg_model = cfg['model']
     
     assert cfg_model != len(classes), 'number classes not fit'
-    for i, (train_indices, valid_indices) in enumerate(kfold.split(df)):
-        print('Fold:', i+1)
-        model = timm.create_model(
-            cfg_model['name'], pretrained=cfg_model['pretrained'], num_classes=cfg_model['num_classes'])
+    model = timm.create_model(
+        cfg_model['name'], pretrained=cfg_model['pretrained'], num_classes=cfg_model['num_classes'])
 
-        df_train = df.loc[train_indices]
-        df_valid = df.loc[valid_indices]
-        train_data = MedicalData(
-            PATH, df_train, classes, device, transform)
-        valid_data = MedicalData(
-            PATH, df_valid, classes, device, transform)
-        train_loader = torch.utils.data.DataLoader(train_data,
-                                                    batch_size=batch_size)
-        valid_loader = torch.utils.data.DataLoader(valid_data,
-                                                    batch_size=batch_size)
+    df_train = pd.read_csv('./data/train_set.csv')
+    df_train, df_valid = train_test_split(df_train, test_size=0.2, random_state=42)
+    df_test = pd.read_csv('./data/test_set.csv')
+    
+    train_data = MedicalData(
+        PATH, df_train, classes, device, transform)
+    valid_data = MedicalData(
+        PATH, df_valid, classes, device, transform)
+    test_data = MedicalData(
+        PATH, df_test, classes, device, transform)
+    
+    train_loader = torch.utils.data.DataLoader(train_data,
+                                                batch_size=batch_size)
+    valid_loader = torch.utils.data.DataLoader(valid_data,
+                                                batch_size=batch_size)
 
-        test_loader = None
-        
-        trainer = Trainer(model=model, 
-                            config=cfg,
-                            train_loader=train_loader,
-                            valid_loader=valid_loader,
-                            test_loader=test_loader,
-                            device=device)
-        
-        if args['load_dir']:
-            trainer.load_model(args['load_dir'])
-        
-        trainer.train(kfold=i+1, save_dir=model_dir)
-        trainer.visualize(visual_dir, i+1)
-        print(train_data.class2index)
+    test_loader = torch.utils.data.DataLoader(test_data,
+                                                batch_size=batch_size)
+    
+    trainer = Trainer(model=model, 
+                        config=cfg,
+                        train_loader=train_loader,
+                        valid_loader=valid_loader,
+                        test_loader=test_loader,
+                        device=device)
+    
+    if args['load_dir']:
+        trainer.load_model(args['load_dir'])
+    
+    trainer.train(kfold=1, save_dir=model_dir)
+    trainer.visualize(visual_dir, 1)
+    print(train_data.class2index)
 
     
 if __name__ == "__main__":

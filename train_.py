@@ -63,16 +63,16 @@ def kfold_split(PATH, n_splits=5):
 def check_gpu(use_gpu):
     return 'cuda:0' if torch.cuda.is_available() and use_gpu else 'cpu'
 
-def main():
-    parser = argparse.ArgumentParser(description='Classification training')
-    parser.add_argument('--save_dir', type=str, default='./save/')
-    parser.add_argument('--save_name', type=str, default='model.pt')
-    parser.add_argument('--load_dir', type=str, default='')
-    parser.add_argument('--logs_dir', type=str, default='./logs/')
+def main(model):
+    # parser = argparse.ArgumentParser(description='Classification training')
+    # parser.add_argument('--save_dir', type=str, default='./save/')
+    # parser.add_argument('--save_name', type=str, default='model.pt')
+    # parser.add_argument('--load_dir', type=str, default='')
+    # parser.add_argument('--logs_dir', type=str, default='./logs/')
 
-    args = parser.parse_args()
-    args = vars(args)
-    args = {k: v for k, v in args.items() if v is not None}
+    # args = parser.parse_args()
+    # args = vars(args)
+    # args = {k: v for k, v in args.items() if v is not None}
 
     current_time = str(datetime.now())
     stream = open('./config/config.yml', 'r')
@@ -82,8 +82,11 @@ def main():
     batch_size = cfg['datasets']['batch_size']
     img_width = cfg['datasets']['image_width']
     img_height = cfg['datasets']['image_height']
-    save_dir = args['save_dir']
-    logs_dir = args['logs_dir']
+    # save_dir = args['save_dir']
+    # logs_dir = args['logs_dir']
+    save_dir = './save/'
+    logs_dir = './logs/'
+    load_data(PATH)
         
     model_dir = os.path.join(save_dir, 'save_{}'.format(current_time))
     try:
@@ -103,31 +106,50 @@ def main():
 
     device = check_gpu(cfg['use_gpu'])
 
-    transform = transforms.Compose([
+    transform_train = transforms.Compose([
         transforms.RandomRotation(30),
         transforms.GaussianBlur(3),
         transforms.RandomHorizontalFlip(0.3),
         transforms.Resize((img_height, img_width)),
-        transforms.ToTensor()
+        transforms.ToTensor(),
+        transforms.Normalize([0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262]),
+        transforms.RandomErasing()
+    ])
+    
+    transform_valid = transforms.Compose([
+        transforms.Resize((img_height, img_width)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262])
     ])
 
     classes = pd.read_csv('./class.csv')
     cfg_model = cfg['model']
     
     assert cfg_model != len(classes), 'number classes not fit'
-    model = timm.create_model(
-        cfg_model['name'], pretrained=cfg_model['pretrained'], num_classes=cfg_model['num_classes'])
+    
+    if model:
+        model = model
+    else:
+        model = timm.create_model(
+            cfg_model['name'], pretrained=cfg_model['pretrained'], num_classes=cfg_model['num_classes'])
+    
+        # freeze paramter of eca_nfnet_l0
+        if cfg_model['name'] == 'hf-hub:timm/eca_nfnet_l0':
+            for child in model.children():
+                if child != model.head:
+                    for param in child.parameters():
+                        param.requires_grad = False
 
     df_train = pd.read_csv('./data/train_set.csv')
     df_train, df_valid = train_test_split(df_train, test_size=0.2, random_state=42)
     df_test = pd.read_csv('./data/test_set.csv')
     
     train_data = MedicalData(
-        PATH, df_train, classes, device, transform)
+        PATH, df_train, classes, device, transform_train)
     valid_data = MedicalData(
-        PATH, df_valid, classes, device, transform)
+        PATH, df_valid, classes, device, transform_valid)
     test_data = MedicalData(
-        PATH, df_test, classes, device, transform)
+        PATH, df_test, classes, device, transform_valid)
     
     train_loader = torch.utils.data.DataLoader(train_data,
                                                 batch_size=batch_size)
@@ -144,8 +166,8 @@ def main():
                         test_loader=test_loader,
                         device=device)
     
-    if args['load_dir']:
-        trainer.load_model(args['load_dir'])
+    # if args['load_dir']:
+    #     trainer.load_model(args['load_dir'])
     
     trainer.train(kfold=1, save_dir=model_dir)
     trainer.visualize(visual_dir, 1)

@@ -164,6 +164,8 @@ runs/
 # data/
 save/
 class.csv
+logs/
 
 train_hw/
 data_
+train_with_kfold.py

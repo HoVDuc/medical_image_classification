@@ -34,13 +34,14 @@ class Trainer:
             'cb': ClassBalanced(self.num_classes)
         }
         self.criterion = loss_func[config['loss']['name']]
-                
+
         # Optimizer
-        self.optim = torch.optim.AdamW(params=self.model.parameters(), lr=self.lr)
-        self.scheduler = OneCycleLR(optimizer=self.optim, 
-                                    max_lr=self.max_lr, 
+        self.optim = torch.optim.AdamW(
+            params=self.model.parameters(), lr=self.lr)
+        self.scheduler = OneCycleLR(optimizer=self.optim,
+                                    max_lr=self.max_lr,
                                     total_steps=self.epochs*len(train_loader)*int(config['kfold']['num_fold']))
-        
+
     def check_device(self):
         return 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
@@ -58,20 +59,22 @@ class Trainer:
         loss.backward()
         self.optim.step()
         self.scheduler.step()
-        
+
         return loss.item(), self.accuracy(pred, targets).item()
 
     def accuracy(self, preds, targets):
-        accuracy = torchmetrics.Accuracy('multiclass', num_classes=self.num_classes).to(self.device)
+        accuracy = torchmetrics.Accuracy(
+            'multiclass', num_classes=self.num_classes).to(self.device)
         return accuracy(preds, targets)
-    
+
     def f1_scores(self, preds, targets):
         f1 = torchmetrics.F1Score(
             task='multiclass', num_classes=self.num_classes).to(self.device)
         return f1(preds, targets)
 
     def precision(self, preds, targets):
-        metric = MulticlassPrecision(num_classes=self.num_classes).to(self.device)
+        metric = MulticlassPrecision(
+            num_classes=self.num_classes).to(self.device)
         return metric(preds, targets)
 
     def recall(self, preds, targets):
@@ -85,9 +88,10 @@ class Trainer:
         return ap
 
     def confusion_matrix(self, preds, targets):
-        metric = MulticlassConfusionMatrix(num_classes=self.num_classes).to(self.device)
+        metric = MulticlassConfusionMatrix(
+            num_classes=self.num_classes).to(self.device)
         return metric(preds, targets)
-    
+
     def metrics(self, pred, targets):
         f1_scores = self.f1_scores(pred, targets)
         accuracy = self.accuracy(pred, targets)
@@ -96,21 +100,21 @@ class Trainer:
         recall = self.recall(pred, targets)
         confusion_matrix = self.confusion_matrix(pred, targets)
         return accuracy, f1_scores, mAP, precision, recall, confusion_matrix
-    
+
     def display_classification_report(self, preds, targets):
         targets_name = pd.read_csv('./class.csv')['class'].to_list()
         print(classification_report(targets, preds, target_names=targets_name))
-    
+
     def validation_step(self, batch):
         self.model.eval()
         inputs, targets = batch
         pred = self.model(inputs)
         loss = self.criterion(pred, targets)
-        
+
         return loss.item(), pred, targets
-    
+
     def validation(self, mode='val'):
-        
+
         total_metrics = {
             'loss': 0,
             'accuracy': 0,
@@ -119,15 +123,17 @@ class Trainer:
             'mAP': 0,
             'recall': 0
         }
-        total_cf = torch.zeros(torch.Size([self.num_classes, self.num_classes]), device=self.device)
+        total_cf = torch.zeros(torch.Size(
+            [self.num_classes, self.num_classes]), device=self.device)
         data_loader = self.valid_loader if mode == 'val' else self.test_loader
         n_sample = len(data_loader)
         preds, targets = [], []
-        
+
         with torch.no_grad():
             for batch in tqdm(data_loader, ncols=100):
                 loss, pred, target = self.validation_step(batch)
-                accuracy, f1_scores, mAP, precision, recall, confusion_matrix = self.metrics(pred, target)
+                accuracy, f1_scores, mAP, precision, recall, confusion_matrix = self.metrics(
+                    pred, target)
                 total_metrics['loss'] += np.round(loss, 3)
                 total_metrics['accuracy'] += np.round(accuracy.item(), 3)
                 total_metrics['f1_scores'] += np.round(f1_scores.item(), 3)
@@ -138,12 +144,13 @@ class Trainer:
 
                 preds.append(torch.argmax(pred, dim=1).cpu().tolist())
                 targets.append(target.cpu().tolist())
-            
+
             preds = list(itertools.chain(*preds))
             targets = list(itertools.chain(*targets))
 
             # self.display_classification_report(preds, targets)
-            avg = {metric: total_metrics[metric] / n_sample for metric in total_metrics}
+            avg = {metric: total_metrics[metric] /
+                   n_sample for metric in total_metrics}
         return avg, total_cf
 
     def save_model(self, save_path):
@@ -175,7 +182,7 @@ class Trainer:
                 total_accuracy += accuracy
             avg_loss = total_loss / n_batch
             avg_val_metrics, cf = self.validation(
-                    mode='val')
+                mode='val')
             avg_accuracy = total_accuracy / n_batch
 
             print('loss:', avg_loss)
@@ -190,11 +197,11 @@ class Trainer:
                 print('Avg loss:', avg_loss)
                 print('metrics:', avg_val_metrics)
                 print('Confusion Matrix:\n', cf)
-            
-            print(self.history)
-            save_path = os.path.join(save_dir, 'model_fold{}_epoch{}.pt'.format(kfold, epoch))
+
+            save_path = os.path.join(
+                save_dir, 'model_fold{}_epoch{}.pt'.format(kfold, epoch))
             self.save_model(save_path)
-            
+
         if self.test_loader:
             avg_test_metrics, cf = self.validation(mode='test')
             print('metrics test:', avg_test_metrics)
@@ -205,17 +212,16 @@ class Trainer:
             path_dir = os.path.join(logs_dir, '{}/'.format(type))
             if not os.path.isdir(path_dir):
                 os.mkdir(path_dir)
-            
+
             val_key = 'val_{}'.format(type)
             plt.plot(self.history[type], label=type)
             plt.plot(self.history[val_key], label=val_key)
             plt.legend()
             plt.grid(True)
-            plt.savefig(os.path.join(path_dir, 'fig_fold_{}.jpg'.format(kfold)))
+            plt.savefig(os.path.join(
+                path_dir, 'fig_fold_{}.jpg'.format(kfold)))
             plt.clf()
             print('Saveed! in ', logs_dir)
-            
+
         visual('loss')
         visual('acc')
-            
-        

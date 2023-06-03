@@ -6,8 +6,8 @@ model:
 
 trainer:
   epochs: 20
-  lr: 1e-4
-  max_lr: 1e-4
+  lr: 1e-3
+  max_lr: 1e-3
   print_every: 5
   total_step: 10*5*10000
   save_dir: ./

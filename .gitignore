@@ -169,3 +169,6 @@ logs/
 train_hw/
 data_
 train_with_kfold.py
+train_.py
+train.py
+loa/

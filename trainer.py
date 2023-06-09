@@ -148,7 +148,7 @@ class Trainer:
             preds = list(itertools.chain(*preds))
             targets = list(itertools.chain(*targets))
 
-            # self.display_classification_report(preds, targets)
+            self.display_classification_report(preds, targets)
             avg = {metric: total_metrics[metric] /
                    n_sample for metric in total_metrics}
         return avg, total_cf
@@ -168,6 +168,7 @@ class Trainer:
             'acc': [],
             'val_acc': []
         }
+        
         for epoch in range(1, self.epochs + 1):
             print("EPOCH: {}/{}".format(epoch, self.epochs))
             print('---' * 200)
@@ -184,11 +185,7 @@ class Trainer:
             avg_val_metrics, cf = self.validation(
                 mode='val')
             avg_accuracy = total_accuracy / n_batch
-
-            print('loss:', avg_loss)
-            print('val_loss:', avg_val_metrics['loss'])
-            print('acc:', avg_accuracy)
-            print('val_acc:', avg_val_metrics['accuracy'])
+            
             self.history['loss'].append(avg_loss)
             self.history['val_loss'].append(avg_val_metrics['loss'])
             self.history['acc'].append(avg_accuracy)

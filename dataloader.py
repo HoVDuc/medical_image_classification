@@ -6,7 +6,7 @@ from PIL import Image
 class MedicalData(Dataset):
 
     def __init__(self, path, df, classes, device, transform=None):
-        self.df = df.to_numpy()
+        self.df = df
         classes = classes['class'].to_list()
         self.convert_labels(classes)
         self.device = device
@@ -20,8 +20,8 @@ class MedicalData(Dataset):
         return len(self.df)
 
     def __getitem__(self, index):
-        filename = self.df[index][0]
-        folder = self.df[index][1]
+        filename = self.df.iloc[index]['file']
+        folder = self.df.iloc[index]['label']
         label = torch.tensor(self.class2index[folder], device=self.device)
         file_path = f"{self.path}{folder}/{filename}"
         image = Image.open(file_path)

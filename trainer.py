@@ -171,7 +171,6 @@ class Trainer:
         
         for epoch in range(1, self.epochs + 1):
             print("EPOCH: {}/{}".format(epoch, self.epochs))
-            print('---' * 200)
             total_loss = 0
             total_accuracy = 0
             n_batch = len(self.train_loader)

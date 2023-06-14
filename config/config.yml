@@ -23,4 +23,4 @@ datasets:
   root: ../../Datasets/Classification/Data_classification/
   image_width: 224
   image_height: 224
-  batch_size: 20
+  batch_size: 32

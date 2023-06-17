@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torchmetrics
 from torch.optim.lr_scheduler import OneCycleLR
-from tqdm import tqdm
+from tqdm.notebook import tqdm
 from loss.focal_loss import FocalLoss
 from loss.class_balanced_loss import ClassBalanced
 from torchmetrics.classification import MulticlassPrecision, MulticlassRecall, MulticlassConfusionMatrix
@@ -55,6 +55,8 @@ class Trainer:
         inputs, targets = batch
         pred = self.model(inputs)
         loss = self.criterion(pred, targets)
+        reg_loss = self.regularization_loss(lamda=1e-3, model=self.model, l=2)
+        loss += reg_loss
         self.optim.zero_grad()
         loss.backward()
         self.optim.step()
@@ -62,44 +64,38 @@ class Trainer:
 
         return loss.item(), self.accuracy(pred, targets).item()
 
-    def accuracy(self, preds, targets):
-        accuracy = torchmetrics.Accuracy(
-            'multiclass', num_classes=self.num_classes).to(self.device)
-        return accuracy(preds, targets)
-
-    def f1_scores(self, preds, targets):
-        f1 = torchmetrics.F1Score(
-            task='multiclass', num_classes=self.num_classes).to(self.device)
-        return f1(preds, targets)
-
-    def precision(self, preds, targets):
-        metric = MulticlassPrecision(
-            num_classes=self.num_classes).to(self.device)
-        return metric(preds, targets)
-
-    def recall(self, preds, targets):
-        metric = MulticlassRecall(num_classes=self.num_classes).to(self.device)
-        return metric(preds, targets)
-
-    def mean_average_precision(self, preds, targets):
-        average_precision = torchmetrics.AveragePrecision(
-            task="multiclass", num_classes=self.num_classes, average="macro", thresholds=5).to(self.device)
-        ap = average_precision(preds, targets)
-        return ap
+    def regularization_loss(self, lamda, model, l=2):
+        reg_loss = 0
+        for param in model.parameters():
+            reg_loss += torch.norm(param, p=l)
+        return lamda * reg_loss
 
     def confusion_matrix(self, preds, targets):
         metric = MulticlassConfusionMatrix(
             num_classes=self.num_classes).to(self.device)
         return metric(preds, targets)
 
-    def metrics(self, pred, targets):
+    def calc_metrics(self, pred, targets):
+
+        def f1_scores(self, preds, targets):
+            f1 = torchmetrics.F1Score(
+                task='multiclass', num_classes=self.num_classes).to(self.device)
+            return f1(preds, targets)
+
+        def precision(self, preds, targets):
+            metric = MulticlassPrecision(
+                num_classes=self.num_classes).to(self.device)
+            return metric(preds, targets)
+
+        def recall(self, preds, targets):
+            metric = MulticlassRecall(num_classes=self.num_classes).to(self.device)
+            return metric(preds, targets)
+        
         f1_scores = self.f1_scores(pred, targets)
-        accuracy = self.accuracy(pred, targets)
-        mAP = self.mean_average_precision(pred, targets)
         precision = self.precision(pred, targets)
         recall = self.recall(pred, targets)
         confusion_matrix = self.confusion_matrix(pred, targets)
-        return accuracy, f1_scores, mAP, precision, recall, confusion_matrix
+        return f1_scores, precision, recall, confusion_matrix
 
     def display_classification_report(self, preds, targets):
         targets_name = pd.read_csv('./class.csv')['class'].to_list()
@@ -117,10 +113,8 @@ class Trainer:
 
         total_metrics = {
             'loss': 0,
-            'accuracy': 0,
             'f1_scores': 0,
             'precision': 0,
-            'mAP': 0,
             'recall': 0
         }
         total_cf = torch.zeros(torch.Size(
@@ -130,18 +124,14 @@ class Trainer:
         preds, targets = [], []
 
         with torch.no_grad():
-            for batch in tqdm(data_loader, ncols=100):
+            for batch in tqdm(data_loader):
                 loss, pred, target = self.validation_step(batch)
-                accuracy, f1_scores, mAP, precision, recall, confusion_matrix = self.metrics(
-                    pred, target)
+                f1_scores, precision, recall, confusion_matrix = self.metrics(pred, target)
                 total_metrics['loss'] += np.round(loss, 3)
-                total_metrics['accuracy'] += np.round(accuracy.item(), 3)
                 total_metrics['f1_scores'] += np.round(f1_scores.item(), 3)
                 total_metrics['precision'] += np.round(precision.item(), 3)
-                total_metrics['mAP'] += np.round(mAP.item(), 3)
                 total_metrics['recall'] += np.round(recall.item(), 3)
                 total_cf += confusion_matrix
-
                 preds.append(torch.argmax(pred, dim=1).cpu().tolist())
                 targets.append(target.cpu().tolist())
 
@@ -162,35 +152,22 @@ class Trainer:
         print('Loaded!')
 
     def train(self, kfold, save_dir):
-        self.history = {
-            'loss': [],
-            'val_loss': [],
-            'acc': [],
-            'val_acc': []
-        }
-        
         for epoch in range(1, self.epochs + 1):
             print("EPOCH: {}/{}".format(epoch, self.epochs))
             total_loss = 0
             total_accuracy = 0
             n_batch = len(self.train_loader)
-            pbar = tqdm(self.train_loader, ncols=100)
-            for batch in pbar:
+            pbar = tqdm(self.train_loader)
+            for i, batch in enumerate(pbar):
                 loss, accuracy = self.training_step(batch)
-                pbar.set_description('loss: {}'.format(loss))
                 total_loss += loss
+                pbar.set_description("Loss: {}".format(total_loss / (i+1)))
                 total_accuracy += accuracy
-            avg_loss = total_loss / n_batch
-            avg_val_metrics, cf = self.validation(
-                mode='val')
-            avg_accuracy = total_accuracy / n_batch
-            
-            self.history['loss'].append(avg_loss)
-            self.history['val_loss'].append(avg_val_metrics['loss'])
-            self.history['acc'].append(avg_accuracy)
-            self.history['val_acc'].append(avg_val_metrics['accuracy'])
+
             if epoch % self.print_every == 0:
-                print('Avg loss:', avg_loss)
+                avg_val_metrics, cf = self.validation(
+                mode='val')
+                # print('Avg loss:', avg_loss)
                 print('metrics:', avg_val_metrics)
                 print('Confusion Matrix:\n', cf)
 
@@ -221,3 +198,4 @@ class Trainer:
 
         visual('loss')
         visual('acc')
+        plt.show()

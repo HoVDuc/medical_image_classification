@@ -13,7 +13,7 @@ trainer:
   save_dir: ./
 
 loss:
-  name: ce
+  name: focal
 
 kfold: 
   use_kfold: true

@@ -40,11 +40,6 @@ def load_config(config_path):
 
 def create_folder():
     current_time = str(datetime.now())
-    # batch_size = cfg['datasets']['batch_size']
-    # img_width = cfg['datasets']['image_width']
-    # img_height = cfg['datasets']['image_height']
-    # save_dir = args['save_dir']
-    # logs_dir = args['logs_dir']
     save_dir = './save/'
     logs_dir = './logs/'
         

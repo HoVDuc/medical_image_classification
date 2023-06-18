@@ -6,12 +6,13 @@ from torch.optim.lr_scheduler import OneCycleLR
 from tqdm.notebook import tqdm
 from loss.focal_loss import FocalLoss
 from loss.class_balanced_loss import ClassBalanced
-from torchmetrics.classification import MulticlassPrecision, MulticlassRecall, MulticlassConfusionMatrix
+from torchmetrics.classification import MulticlassF1Score, MulticlassPrecision, MulticlassRecall, MulticlassConfusionMatrix
 import pandas as pd
 from sklearn.metrics import classification_report
 import itertools
 import matplotlib.pyplot as plt
 import numpy as np
+from optimizer.sophia import SophiaG
 
 
 class Trainer:
@@ -25,6 +26,7 @@ class Trainer:
         self.lr = float(config['trainer']['lr'])
         self.max_lr = float(config['trainer']['max_lr'])
         self.print_every = config['trainer']['print_every']
+        self.is_visualize = config['trainer']['visualize']
         self.train_loader = train_loader
         self.valid_loader = valid_loader
         self.test_loader = test_loader
@@ -36,19 +38,15 @@ class Trainer:
         self.criterion = loss_func[config['loss']['name']]
 
         # Optimizer
-        self.optim = torch.optim.AdamW(
-            params=self.model.parameters(), lr=self.lr)
+        # self.optim = torch.optim.AdamW(
+        #     params=self.model.parameters(), lr=self.lr)
+        self.optim = SophiaG(self.model.parameters(), lr=1e-3, betas=(0.965, 0.99), rho = 0.01, weight_decay=1e-1)
         self.scheduler = OneCycleLR(optimizer=self.optim,
                                     max_lr=self.max_lr,
                                     total_steps=self.epochs*len(train_loader)*int(config['kfold']['num_fold']))
 
     def check_device(self):
         return 'cuda:0' if torch.cuda.is_available() else 'cpu'
-
-    def calc_accuracy(self, pred, targets):
-        pred = torch.argmax(pred, dim=1)
-        accuracy = sum(pred == targets)
-        return accuracy / len(targets)
 
     def training_step(self, batch):
         self.model.train()
@@ -61,8 +59,7 @@ class Trainer:
         loss.backward()
         self.optim.step()
         self.scheduler.step()
-
-        return loss.item(), self.accuracy(pred, targets).item()
+        return loss.item()
 
     def regularization_loss(self, lamda, model, l=2):
         reg_loss = 0
@@ -70,31 +67,30 @@ class Trainer:
             reg_loss += torch.norm(param, p=l)
         return lamda * reg_loss
 
-    def confusion_matrix(self, preds, targets):
-        metric = MulticlassConfusionMatrix(
-            num_classes=self.num_classes).to(self.device)
-        return metric(preds, targets)
-
     def calc_metrics(self, pred, targets):
 
-        def f1_scores(self, preds, targets):
-            f1 = torchmetrics.F1Score(
-                task='multiclass', num_classes=self.num_classes).to(self.device)
+        def calc_f1_scores(preds, targets):
+            f1 = MulticlassF1Score(num_classes=self.num_classes).to(self.device)
             return f1(preds, targets)
 
-        def precision(self, preds, targets):
+        def calc_precision(preds, targets):
             metric = MulticlassPrecision(
                 num_classes=self.num_classes).to(self.device)
             return metric(preds, targets)
 
-        def recall(self, preds, targets):
+        def calc_recall(preds, targets):
             metric = MulticlassRecall(num_classes=self.num_classes).to(self.device)
             return metric(preds, targets)
         
-        f1_scores = self.f1_scores(pred, targets)
-        precision = self.precision(pred, targets)
-        recall = self.recall(pred, targets)
-        confusion_matrix = self.confusion_matrix(pred, targets)
+        def calc_confusion_matrix(preds, targets):
+            metric = MulticlassConfusionMatrix(
+                num_classes=self.num_classes).to(self.device)
+            return metric(preds, targets)
+        
+        f1_scores = calc_f1_scores(pred, targets)
+        precision = calc_precision(pred, targets)
+        recall = calc_recall(pred, targets)
+        confusion_matrix = calc_confusion_matrix(pred, targets)
         return f1_scores, precision, recall, confusion_matrix
 
     def display_classification_report(self, preds, targets):
@@ -106,7 +102,6 @@ class Trainer:
         inputs, targets = batch
         pred = self.model(inputs)
         loss = self.criterion(pred, targets)
-
         return loss.item(), pred, targets
 
     def validation(self, mode='val'):
@@ -126,7 +121,7 @@ class Trainer:
         with torch.no_grad():
             for batch in tqdm(data_loader):
                 loss, pred, target = self.validation_step(batch)
-                f1_scores, precision, recall, confusion_matrix = self.metrics(pred, target)
+                f1_scores, precision, recall, confusion_matrix = self.calc_metrics(pred, target)
                 total_metrics['loss'] += np.round(loss, 3)
                 total_metrics['f1_scores'] += np.round(f1_scores.item(), 3)
                 total_metrics['precision'] += np.round(precision.item(), 3)
@@ -152,22 +147,26 @@ class Trainer:
         print('Loaded!')
 
     def train(self, kfold, save_dir):
+        self.history = {
+            'loss': [],
+            'val_loss': [],
+        }
+        
         for epoch in range(1, self.epochs + 1):
             print("EPOCH: {}/{}".format(epoch, self.epochs))
             total_loss = 0
-            total_accuracy = 0
             n_batch = len(self.train_loader)
             pbar = tqdm(self.train_loader)
             for i, batch in enumerate(pbar):
-                loss, accuracy = self.training_step(batch)
+                loss = self.training_step(batch)
                 total_loss += loss
                 pbar.set_description("Loss: {}".format(total_loss / (i+1)))
-                total_accuracy += accuracy
-
+            self.history['loss'].append(total_loss / n_batch)
+            
             if epoch % self.print_every == 0:
                 avg_val_metrics, cf = self.validation(
                 mode='val')
-                # print('Avg loss:', avg_loss)
+                self.history['val_loss'].append(avg_val_metrics['loss'])
                 print('metrics:', avg_val_metrics)
                 print('Confusion Matrix:\n', cf)
 
@@ -195,7 +194,5 @@ class Trainer:
                 path_dir, 'fig_fold_{}.jpg'.format(kfold)))
             plt.clf()
             print('Saveed! in ', logs_dir)
-
         visual('loss')
-        visual('acc')
         plt.show()

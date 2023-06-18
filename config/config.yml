@@ -11,6 +11,7 @@ trainer:
   print_every: 5
   total_step: 10*5*10000
   save_dir: ./
+  visualize: true
 
 loss:
   name: focal
